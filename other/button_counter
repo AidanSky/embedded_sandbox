@@ -1,0 +1,93 @@
+#![no_std]
+#![no_main]
+
+use panic_halt as _; // Or panic_probe for debugging
+
+use cortex_m_rt::entry;
+use stm32f4xx_hal::{
+    prelude::*,
+    pac,
+    rcc::{RccExt, Clocks},
+    gpio::GpioExt,
+    timer::{
+        counter::CounterHz,
+        pwm::{PwmChannels, CPin, NCPin}, // Import relevant PWM types
+        TimerExt,
+    },
+};
+use fugit::Hertz; // For frequency units
+
+#[entry]
+fn main() -> ! {
+    // Take ownership of the peripherals
+    let dp = pac::Peripherals::take().unwrap();
+    let cp = cortex_m::Peripherals::take().unwrap();
+
+    // Configure the Rcc (Reset and Clock Control)
+    let rcc = dp.RCC.constrain();
+    let clocks = rcc.cfgr.freeze(&mut dp.FLASH.constrain().acr);
+
+    // Get GPIO peripheral
+    let gpioa = dp.GPIOA.split();
+    // let gpiob = dp.GPIOB.split(); // Example if you need other GPIOs
+
+    // 1. Choose a Timer and its associated GPIO pin
+    // The STM32F446RE has various timers. For example, let's use TIM2.
+    // Check your STM32F446RE datasheet/reference manual for the exact
+    // timer channels and their corresponding GPIO alternate functions.
+    // For this example, let's assume PA0 is TIM2_CH1.
+    let pa0 = gpioa.pa0.into_alternate_af1(); // AF1 is typically TIM2 for PA0
+
+    // 2. Configure the Timer for PWM
+    // This part varies slightly depending on the specific timer and HAL version.
+    // The `timer` module in stm32f4xx-hal provides methods to configure timers
+    // for various modes, including PWM.
+
+    // Example using a general-purpose timer like TIM2
+    // `pwm` method returns a tuple of channels
+    let (mut tim2_ch1, _, _, _) = dp.TIM2.pwm(
+        pa0, // The pin you configured for the PWM channel
+        // Example: If you need multiple channels, you'd pass tuples of pins here,
+        // e.g., (pa0.into_af1(), pa1.into_af1()), and so on.
+        Hertz(500), // Desired PWM frequency (e.g., 500 Hz)
+        clocks,     // Clock configuration
+    );
+
+    // 3. Enable the PWM channel
+    tim2_ch1.enable();
+
+    // 4. Set the initial duty cycle
+    // Duty cycle is typically a value between 0 and `max_duty()`.
+    // `max_duty()` depends on the timer's internal counter resolution and frequency.
+    let max_duty = tim2_ch1.get_max_duty();
+    tim2_ch1.set_duty(max_duty / 2); // 50% duty cycle initially
+
+    // You can also get other channels from the same timer
+    // If you initially created the timer with multiple pins, you would have
+    // `(mut tim2_ch1, mut tim2_ch2, ...)`
+
+    // Now, you can change the duty cycle dynamically
+    let mut duty_cycle_value = 0;
+    let mut increasing = true;
+
+    loop {
+        if increasing {
+            duty_cycle_value += 100;
+            if duty_cycle_value > max_duty {
+                duty_cycle_value = max_duty;
+                increasing = false;
+            }
+        } else {
+            duty_cycle_value -= 100;
+            if duty_cycle_value < 0 {
+                duty_cycle_value = 0;
+                increasing = true;
+            }
+        }
+
+        tim2_ch1.set_duty(duty_cycle_value);
+
+        // Add a delay to observe the change (e.g., blink an LED with varying brightness)
+        cortex_m::asm::delay(clocks.sysclk().raw() / 1000); // Simple delay
+    }
+}

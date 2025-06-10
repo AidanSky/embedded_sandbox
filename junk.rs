@@ -1,7 +1,6 @@
 #![no_main]
 #![no_std]
 
-use cortex_m::delay::Delay;
 use fugit::{Rate, RateExtU32};
 use stm32f4xx_hal::{gpio::alt::tim1, pac, prelude::*, timer::{Channel, Timer}};
 use cortex_m_rt::entry;
@@ -11,36 +10,30 @@ use panic_halt as _;
 #[entry]
 fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
-    let cp = cortex_m::Peripherals::take().unwrap();
 
     let rcc = dp.RCC.constrain();
     let clocks = rcc.cfgr.freeze();
-
-    let mut delay = Delay::new(cp.SYST, &clocks);
+    let mut delay = dp.TIM1.delay_ms(&clocks);
 
     let gpioa = dp.GPIOA.split();
     let gpioc = dp.GPIOC.split();
 
-    let pa5 = gpioa.pa5.into_alternate();
+    let mut led_pin = gpioa.pa5.into_alternate();
     let button = gpioc.pc13.into_pull_down_input();
-
-    // let timer = Timer::new(dp.TIM2, &clocks);
-    let tim2 = dp.TIM2;
 
     let timer = Timer::new(dp.TIM2, &clocks);
 
-    // let rate = Rate::<u32, 1_000, 1>::from_raw(1);
+    let rate = Rate::<u32, 1_000, 1>::from_raw(1);
 
-    // let tim2 = dp.TIM2;
+    let tim2 = dp.TIM2;
 
-    // let tim1 = gpioa.pa0.into_alternate();
+    let tim1 = gpioa.pa0.into_alternate();
 
-    // let dp_tim1 = dp.TIM1;
+    let dp_tim1 = dp.TIM1;
 
     let frequency = 50.Hz();
 
-    // let pwm = dp_tim1.pwm_us(100.micros(), &clocks);
-    let mut pwm_ch1 = timer.pwm(pa5, frequency, &clocks);
+    let pwm = dp_tim1.pwm_us(100.micros(), &clocks);
 
     let mut pwm_disabled = pwm.1;
 
